@@ -1,0 +1,203 @@
+---
+tidy: FALSE 
+output: html_document
+---
+
+
+# Machine Learning
+## Peer-graded Assignment: Prediction Assignment Writeup
+***
+
+
+> Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here:[Hyperlink](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)  (see the section on the Weight Lifting Exercise Dataset).
+
+
+> Data
+
+The training data for this project are available here:
+[Hyperlink](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here:
+[Hyperlink](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+**The data resourse: [Hyperlink](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.)**  
+
+
+  
+> Goal
+
+The goal of this project is to predict the "classe" variable in the data. 
+
+
+***
+
+> Load the data and library
+
+
+
+```{r echo=TRUE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(data.table)
+
+```
+
+```{r echo=TRUE, cache =TRUE}
+# get the data and set it as data table
+
+urlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+dfTraining <- read.csv(url(urlTrain),na.strings=c("NA","#DIV/0!",""))
+dfTesting  <- read.csv(url(urlTest),na.strings=c("NA","#DIV/0!",""))
+
+setDT(dfTraining)
+setDT(dfTesting)
+
+
+```
+
+
+> Data Cleaning
+
+```{r echo=TRUE}
+str(dfTraining)
+
+
+```
+So many NA data
+
+```{r echo=TRUE}
+# plot the proposion of NA in every columns. using prob.table
+plot(prop.table(colSums(is.na(dfTraining))))
+
+```
+
+Since the NA value is none or all, we can just discard the columns which contain NA data.
+
+```{r echo=TRUE}
+# find out the columns which contain NA and remove them
+
+selectedColumns <-dfTraining[,colSums(is.na(dfTraining)) == 0]
+selectedTraning <-dfTraining[,..selectedColumns]
+selectedTesting <-dfTesting[,..selectedColumns]
+dim(dfTraining)
+dim(selectedTraning)
+```
+
+Removing columns with near zero variance
+
+```{r echo=TRUE, cache =TRUE}
+# using nearzerovar function to find out the variable which is useless
+zeroVar<-selectedTraning[,nearZeroVar(selectedTraning)]
+myTrain <-selectedTraning[,(zeroVar):=NULL]
+myTest <- selectedTesting[,(zeroVar):=NULL]
+dim(myTrain)
+dim(myTest)
+```
+
+Since first columns is serial numbers, revoming it avoids wrong prediction in predition model. And also time series data "X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp" are being removed
+
+```{r echo=TRUE}
+
+myTrain=myTrain[,-c(1:5)]
+
+```
+
+> Seperate the training data and test data
+
+```{r echo=TRUE}
+set.seed(1)
+# set up 60% data as training data by sample fuction
+ t <-sample(19622,19622*0.6)
+
+iTrain <- myTrain[t,] 
+iTest <- myTrain[-t,] 
+
+```
+
+
+
+> Fit the data with ML model: Decision Tress
+
+
+Create the model and plot
+
+```{r echo=TRUE, cache=TRUE}
+dTree <- rpart(classe ~ ., data=iTrain, method="class")
+
+prp(dTree, cex = .6)
+
+```
+
+
+
+Predicting:
+
+```{r echo=TRUE, cache=TRUE}
+predDtree <- predict(dTree, iTest, type = "class")
+confusionMatrix(predDtree, iTest$classe)
+
+
+```
+
+
+
+The accuracy, 0.736, is not good. I affraid it can't predict the test data well. The estimation of the out-of-sample error rate is 1-accuracy which is **0.27**
+> Fit the data with ML model: Random Forest
+
+Create a model of Random Forest
+```{r echo=TRUE}
+
+RTree <- randomForest(classe ~. , data=iTrain)
+summary(RTree)
+
+```
+
+
+Prediction
+```{r echo=TRUE}
+predRtree <- predict(RTree, iTest, type = "class")
+confusionMatrix(predRtree, iTest$classe)
+
+```
+
+
+Wow! the accuracy is so high, which is 0.99. But I worry about overfitting in this data set and then have a poor predction in other data set.The estimation of the out-of-sample error rate is 1-accuracy which is **0.01**
+
+
+> Conclusion
+
+As expectation, Random Forest has a beeter performance since it's a resampling method. The accuracy is 0.99 and Kappa is 0.99 as well. Hoping this model can successfully predict the rest of 20 data set.
+
+Actually, in the begining, I don't remove the columns [,1:5], and the prediction result is terible. When I look close to the desition tree plot, I found that all the branches decided by serial numbers. It's not supprised, the model goes like that when I think about the algorithm. It's a intresting discovery for me!
+
+
+
+
+> Predicting on the Testing Data 
+
+Decision Tree Prediction
+
+```{r echo=TRUE}
+
+predDtreeT <- predict(dTree, myTest, type = "class")
+predDtreeT
+```
+
+
+
+```{r echo=TRUE}
+predRtree <- predict(RTree, myTest, type = "class")
+predRtree
+
+```
+
+
+
+
+
